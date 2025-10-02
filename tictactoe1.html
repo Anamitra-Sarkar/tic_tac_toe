@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Holographic Tic-Tac-Toe</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts: Orbitron & Rajdhani -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+    
+    <!-- Tone.js for Sound Effects -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+
+    <!-- Custom Styles -->
+    <style>
+        :root {
+            --bg-color: #0a0f1f;
+            --grid-line-color: rgba(0, 191, 255, 0.3);
+            --cell-bg-color: rgba(0, 191, 255, 0.05);
+            --cell-hover-color: rgba(0, 191, 255, 0.15);
+            --x-color: #00f7ff;
+            --o-color: #ff00c8;
+            --text-color: #e0e7ff;
+            --glow-primary: #00f7ff;
+            --glow-secondary: #ff00c8;
+            --hint-color: #facc15; /* Yellow for hints */
+        }
+
+        body {
+            font-family: 'Rajdhani', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-image: 
+                radial-gradient(ellipse at top, rgba(0, 191, 255, 0.2), transparent 50%),
+                radial-gradient(ellipse at bottom, rgba(255, 0, 200, 0.2), transparent 50%);
+        }
+
+        .main-title {
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 900;
+            font-size: 3.5rem;
+            background: linear-gradient(90deg, var(--x-color), var(--o-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 2rem;
+            text-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
+            z-index: 10;
+        }
+
+        .game-container {
+            background: rgba(10, 15, 31, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(0, 191, 255, 0.2);
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 0 50px rgba(0, 191, 255, 0.1);
+            text-align: center;
+            width: 95%;
+            max-width: 500px;
+        }
+
+        .status-panel {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.5rem;
+            margin-bottom: 1.5rem;
+            min-height: 2.5rem;
+            color: var(--text-color);
+            text-shadow: 0 0 5px var(--glow-primary);
+        }
+        .status-panel .turn-x { color: var(--x-color); text-shadow: 0 0 8px var(--x-color); }
+        .status-panel .turn-o { color: var(--o-color); text-shadow: 0 0 8px var(--o-color); }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            width: 300px;
+            height: 300px;
+            margin: 0 auto;
+            position: relative;
+            background-color: transparent;
+            box-shadow: 0 0 20px var(--grid-line-color);
+            border-radius: 10px;
+        }
+        
+        .cell {
+            width: 100px;
+            height: 100px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            background-color: var(--cell-bg-color);
+            border: 1px solid var(--grid-line-color);
+            transition: background-color 0.3s ease, box-shadow 0.3s ease;
+        }
+        .cell:not(.x):not(.o):hover {
+            background-color: var(--cell-hover-color);
+        }
+        /* NEW: Hint highlight style */
+        .cell.hint-glow {
+            box-shadow: 0 0 25px var(--hint-color);
+            border-color: var(--hint-color);
+        }
+
+        .cell:nth-child(-n+3) { border-top: none; }
+        .cell:nth-child(3n+1) { border-left: none; }
+        .cell:nth-child(3n) { border-right: none; }
+        .cell:nth-child(n+7) { border-bottom: none; }
+        .cell:first-child { border-top-left-radius: 10px; }
+        .cell:nth-child(3) { border-top-right-radius: 10px; }
+        .cell:nth-child(7) { border-bottom-left-radius: 10px; }
+        .cell:last-child { border-bottom-right-radius: 10px; }
+
+        .cell svg {
+            width: 60px;
+            height: 60px;
+            stroke-width: 8;
+            stroke-linecap: round;
+            animation: draw-in 0.5s ease-out forwards;
+            pointer-events: none;
+        }
+
+        .cell.x svg { stroke: var(--x-color); filter: drop-shadow(0 0 5px var(--x-color)); }
+        .cell.o svg { stroke: var(--o-color); filter: drop-shadow(0 0 5px var(--o-color)); }
+
+        @keyframes draw-in {
+            from { stroke-dasharray: 1000; stroke-dashoffset: 1000; }
+            to { stroke-dasharray: 1000; stroke-dashoffset: 0; }
+        }
+
+        .strike-line {
+            position: absolute;
+            background-color: white;
+            height: 5px;
+            border-radius: 5px;
+            transform-origin: left;
+            box-shadow: 0 0 10px white, 0 0 20px white;
+            animation: strike 0.5s ease-out;
+        }
+        @keyframes strike {
+            from { transform: scaleX(0); }
+            to { transform: scaleX(1); }
+        }
+
+        .controls {
+            margin-top: 2rem;
+            display: flex;
+            flex-wrap: wrap; /* Allow buttons to wrap */
+            gap: 1rem;
+            justify-content: center;
+        }
+        .btn {
+            font-family: 'Orbitron', sans-serif;
+            background: transparent;
+            border: 1px solid var(--grid-line-color);
+            color: var(--text-color);
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: inset 0 0 10px var(--cell-bg-color);
+        }
+        .btn:hover:not(:disabled) {
+            background: var(--cell-hover-color);
+            box-shadow: 0 0 15px var(--grid-line-color);
+            color: white;
+        }
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .btn.active {
+            background: var(--cell-hover-color);
+            box-shadow: 0 0 15px var(--grid-line-color);
+            color: white;
+        }
+        #hintBtn {
+            border-color: var(--hint-color);
+            color: var(--hint-color);
+        }
+        #hintBtn:hover:not(:disabled) {
+            box-shadow: 0 0 15px var(--hint-color);
+        }
+
+        #ai-analysis {
+            margin-top: 1.5rem;
+            padding: 1rem;
+            background: rgba(0, 191, 255, 0.1);
+            border-left: 3px solid var(--glow-primary);
+            border-radius: 6px;
+            text-align: center;
+            font-size: 1rem;
+            font-style: italic;
+            min-height: 50px;
+            transition: all 0.3s ease;
+        }
+        #ai-analysis.hint {
+            background: rgba(250, 204, 21, 0.1);
+            border-left-color: var(--hint-color);
+        }
+
+        .scoreboard {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(10, 15, 31, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(0, 191, 255, 0.2);
+            border-radius: 10px;
+            padding: 1rem;
+            box-shadow: 0 0 25px rgba(0, 191, 255, 0.1);
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            z-index: 100;
+            transition: opacity 0.5s, transform 0.5s;
+        }
+        .scoreboard.hidden {
+            opacity: 0;
+            transform: scale(0.9);
+            pointer-events: none;
+        }
+        .score-item {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 1.1rem;
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+        .score-item span:first-child { font-weight: 700; }
+        .score-item .score-wins { color: var(--x-color); }
+        .score-item .score-losses { color: var(--o-color); }
+        .score-item .score-draws { color: var(--text-color); }
+        .score-item .score-value {
+            font-family: 'Orbitron', sans-serif;
+            min-width: 30px;
+            text-align: right;
+            transition: text-shadow 0.2s;
+        }
+        .score-value.flash { animation: flash-glow 0.5s ease; }
+        @keyframes flash-glow {
+            0% { text-shadow: 0 0 15px white; }
+            100% { text-shadow: none; }
+        }
+
+    </style>
+</head>
+<body>
+    
+    <h1 class="main-title">Holographic Battle</h1>
+
+    <div class="game-container">
+        <div id="statusPanel" class="status-panel">Select a Mode</div>
+        <div class="controls mb-6">
+            <button id="pvpBtn" class="btn active">Player vs Player</button>
+            <button id="pvcBtn" class="btn">Player vs AI</button>
+        </div>
+        <div id="board" class="board"></div>
+        <div class="controls">
+            <button id="resetBtn" class="btn">Reset Game</button>
+            <button id="hintBtn" class="btn hidden">✨ Get AI Hint</button>
+            <button id="analysisBtn" class="btn hidden">Get AI Analysis</button>
+        </div>
+        <div id="ai-analysis" class="hidden"></div>
+    </div>
+
+    <div id="scoreboard" class="scoreboard hidden">
+        <div class="score-item">
+            <span class="score-wins">WINS</span>
+            <span id="winsCount" class="score-value">0</span>
+        </div>
+        <div class="score-item">
+            <span class="score-losses">LOSSES</span>
+            <span id="lossesCount" class="score-value">0</span>
+        </div>
+        <div class="score-item">
+            <span class="score-draws">DRAWS</span>
+            <span id="drawsCount" class="score-value">0</span>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const YOUR_API_KEY = "AIzaSyCD5L3DG6V1Krb9rn1EGn2XlE6TSNZuXG8";
+
+            const boardElement = document.getElementById('board');
+            const statusPanel = document.getElementById('statusPanel');
+            const pvpBtn = document.getElementById('pvpBtn');
+            const pvcBtn = document.getElementById('pvcBtn');
+            const resetBtn = document.getElementById('resetBtn');
+            const analysisBtn = document.getElementById('analysisBtn');
+            const hintBtn = document.getElementById('hintBtn');
+            const aiAnalysisPanel = document.getElementById('ai-analysis');
+            const scoreboard = document.getElementById('scoreboard');
+            const winsCountEl = document.getElementById('winsCount');
+            const lossesCountEl = document.getElementById('lossesCount');
+            const drawsCountEl = document.getElementById('drawsCount');
+
+            let board = ['', '', '', '', '', '', '', '', ''];
+            let currentPlayer = 'X';
+            let isGameActive = true;
+            let gameMode = 'pvp';
+            let isAudioStarted = false;
+            let score = { wins: 0, losses: 0, draws: 0 };
+
+            const placeSynth = new Tone.Synth().toDestination();
+            const winSynth = new Tone.PolySynth(Tone.Synth).toDestination();
+            const drawSynth = new Tone.Synth().toDestination();
+            const notes = { placeX: 'C5', placeO: 'G4', win: ['C5', 'E5', 'G5'], draw: 'C3' };
+
+            const winningConditions = [
+                [0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]
+            ];
+
+            const xSVG = `<svg viewBox="0 0 100 100"><line x1="15" y1="15" x2="85" y2="85"></line><line x1="85" y1="15" x2="15" y2="85"></line></svg>`;
+            const oSVG = `<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="35" fill="none"></circle></svg>`;
+
+            const initializeGame = () => {
+                board = Array(9).fill('');
+                isGameActive = true;
+                currentPlayer = 'X';
+                boardElement.innerHTML = '';
+                boardElement.querySelector('.strike-line')?.remove();
+                
+                analysisBtn.classList.add('hidden');
+                hintBtn.classList.add('hidden');
+                aiAnalysisPanel.classList.add('hidden');
+                aiAnalysisPanel.classList.remove('hint');
+
+
+                for (let i = 0; i < 9; i++) {
+                    const cell = document.createElement('div');
+                    cell.classList.add('cell');
+                    cell.dataset.index = i;
+                    cell.addEventListener('click', handleCellClick);
+                    boardElement.appendChild(cell);
+                }
+                updateStatus();
+            };
+            
+            const startAudio = async () => {
+                if (!isAudioStarted) {
+                    await Tone.start();
+                    isAudioStarted = true;
+                }
+            };
+
+            const handleCellClick = (e) => {
+                startAudio();
+                const clickedCell = e.target.closest('.cell');
+                if (!clickedCell) return;
+                const clickedCellIndex = parseInt(clickedCell.dataset.index);
+
+                if (board[clickedCellIndex] !== '' || !isGameActive) return;
+
+                makeMove(clickedCellIndex, currentPlayer);
+                if (isGameActive) {
+                    changePlayer();
+                    if (gameMode === 'pvc' && currentPlayer === 'O' && isGameActive) {
+                        setTimeout(aiMove, 500);
+                    }
+                }
+            };
+            
+            const makeMove = (index, player) => {
+                if (board[index] === '' && isGameActive) {
+                    board[index] = player;
+                    const cell = boardElement.querySelector(`[data-index='${index}']`);
+                    cell.innerHTML = player === 'X' ? xSVG : oSVG;
+                    cell.classList.add(player.toLowerCase());
+                    placeSynth.triggerAttackRelease(player === 'X' ? notes.placeX : notes.placeO, "8n");
+                    
+                    // Remove any existing hint glows
+                    document.querySelectorAll('.hint-glow').forEach(el => el.classList.remove('hint-glow'));
+                    aiAnalysisPanel.classList.add('hidden');
+                    aiAnalysisPanel.classList.remove('hint');
+
+                    handleResultValidation();
+                }
+            };
+
+            const changePlayer = () => {
+                currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+                updateStatus();
+            };
+
+            const updateStatus = () => {
+                if (!isGameActive) return;
+                statusPanel.innerHTML = `Turn: <span class="turn-${currentPlayer.toLowerCase()}">${currentPlayer}</span>`;
+                // Show/hide hint button based on turn and mode
+                if (gameMode === 'pvc' && currentPlayer === 'X' && isGameActive) {
+                    hintBtn.classList.remove('hidden');
+                } else {
+                    hintBtn.classList.add('hidden');
+                }
+            };
+
+            const handleResultValidation = () => {
+                let roundWon = false;
+                let winCondition;
+                for (const condition of winningConditions) {
+                    const [a, b, c] = condition;
+                    if (board[a] && board[a] === board[b] && board[a] === board[c]) {
+                        roundWon = true;
+                        winCondition = condition;
+                        break;
+                    }
+                }
+
+                if (roundWon) {
+                    statusPanel.innerHTML = `Player <span class="turn-${currentPlayer.toLowerCase()}">${currentPlayer}</span> Wins!`;
+                    isGameActive = false;
+                    drawStrikeLine(winCondition);
+                    winSynth.triggerAttackRelease(notes.win, "4n", Tone.now());
+                    if (gameMode === 'pvc') {
+                        analysisBtn.classList.remove('hidden');
+                        hintBtn.classList.add('hidden');
+                        updateScore(currentPlayer);
+                    }
+                    return;
+                }
+
+                if (!board.includes('')) {
+                    statusPanel.textContent = 'Game is a Draw!';
+                    isGameActive = false;
+                    drawSynth.triggerAttackRelease(notes.draw, "4n", Tone.now());
+                    if (gameMode === 'pvc') {
+                        analysisBtn.classList.remove('hidden');
+                        hintBtn.classList.add('hidden');
+                        updateScore('draw');
+                    }
+                    return;
+                }
+            };
+
+            const drawStrikeLine = (condition) => {
+                const line = document.createElement('div');
+                line.classList.add('strike-line');
+                const [start, , end] = condition;
+                const startCell = boardElement.querySelector(`[data-index='${start}']`);
+                const endCell = boardElement.querySelector(`[data-index='${end}']`);
+                const startRect = startCell.getBoundingClientRect();
+                const boardRect = boardElement.getBoundingClientRect();
+                const startX = startRect.left - boardRect.left + startRect.width / 2;
+                const startY = startRect.top - boardRect.top + startRect.height / 2;
+                const endX = endCell.getBoundingClientRect().left - boardRect.left + endCell.getBoundingClientRect().width / 2;
+                const endY = endCell.getBoundingClientRect().top - boardRect.top + endCell.getBoundingClientRect().height / 2;
+                const angle = Math.atan2(endY - startY, endX - startX) * 180 / Math.PI;
+                const length = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
+                line.style.width = `${length}px`;
+                line.style.top = `${startY}px`;
+                line.style.left = `${startX}px`;
+                line.style.transform = `rotate(${angle}deg)`;
+                boardElement.appendChild(line);
+            };
+
+            const aiMove = () => {
+                let bestScore = -Infinity;
+                let move;
+                for (let i = 0; i < 9; i++) {
+                    if (board[i] === '') {
+                        board[i] = 'O';
+                        let score = minimax(board, 0, false);
+                        board[i] = '';
+                        if (score > bestScore) {
+                            bestScore = score;
+                            move = i;
+                        }
+                    }
+                }
+                makeMove(move, 'O');
+                if(isGameActive) changePlayer();
+            };
+
+            const scores = { X: -1, O: 1, draw: 0 };
+
+            const minimax = (currentBoard, depth, isMaximizing) => {
+                let result = checkWinner(currentBoard);
+                if (result !== null) return scores[result];
+
+                if (isMaximizing) {
+                    let bestScore = -Infinity;
+                    for (let i = 0; i < 9; i++) {
+                        if (currentBoard[i] === '') {
+                            currentBoard[i] = 'O';
+                            bestScore = Math.max(bestScore, minimax(currentBoard, depth + 1, false));
+                            currentBoard[i] = '';
+                        }
+                    }
+                    return bestScore;
+                } else {
+                    let bestScore = Infinity;
+                    for (let i = 0; i < 9; i++) {
+                        if (currentBoard[i] === '') {
+                            currentBoard[i] = 'X';
+                            bestScore = Math.min(bestScore, minimax(currentBoard, depth + 1, true));
+                            currentBoard[i] = '';
+                        }
+                    }
+                    return bestScore;
+                }
+            };
+
+            const checkWinner = (b) => {
+                for (const condition of winningConditions) {
+                    const [p1, p2, p3] = condition;
+                    if (b[p1] && b[p1] === b[p2] && b[p1] === b[p3]) return b[p1];
+                }
+                if (!b.includes('')) return 'draw';
+                return null;
+            };
+            
+            const updateScore = (winner) => {
+                let elementToFlash;
+                if (winner === 'X') {
+                    score.wins++;
+                    elementToFlash = winsCountEl;
+                } else if (winner === 'O') {
+                    score.losses++;
+                    elementToFlash = lossesCountEl;
+                } else if (winner === 'draw') {
+                    score.draws++;
+                    elementToFlash = drawsCountEl;
+                }
+                winsCountEl.textContent = score.wins;
+                lossesCountEl.textContent = score.losses;
+                drawsCountEl.textContent = score.draws;
+                
+                if(elementToFlash) {
+                    elementToFlash.classList.add('flash');
+                    setTimeout(() => elementToFlash.classList.remove('flash'), 500);
+                }
+            };
+
+            const getAIAnalysis = async () => {
+                analysisBtn.disabled = true;
+                aiAnalysisPanel.classList.remove('hidden', 'hint');
+                aiAnalysisPanel.textContent = 'Analyzing battle data...';
+                let outcome = checkWinner(board);
+                let outcomeText = outcome === 'X' ? 'Player X (human) won.' : outcome === 'O' ? 'Player O (AI) won.' : 'The game was a draw.';
+                const boardState = board.map(p => p || '_').join('');
+                const prompt = `In a game of tic-tac-toe against an AI, the final board state was [${boardState}]. The result was: ${outcomeText} Provide a short, witty, and slightly dramatic analysis of the game in one sentence.`;
+                const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${YOUR_API_KEY}`;
+                try {
+                    const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                    if (!response.ok) throw new Error(`API Error: ${response.status}`);
+                    const result = await response.json();
+                    aiAnalysisPanel.textContent = result.candidates[0].content.parts[0].text.trim();
+                } catch (error) {
+                    aiAnalysisPanel.textContent = "Analysis transmission failed.";
+                } finally {
+                    analysisBtn.disabled = false;
+                }
+            };
+            
+            // --- NEW: AI Hint Function ---
+            const getAIHint = async () => {
+                hintBtn.disabled = true;
+                aiAnalysisPanel.classList.remove('hidden');
+                aiAnalysisPanel.classList.add('hint');
+                aiAnalysisPanel.textContent = 'Coach is thinking...';
+
+                const boardStateForPrompt = board.map((p, i) => p ? `${p} at index ${i}` : `empty at index ${i}`).join(', ');
+                const prompt = `You are a Tic-Tac-Toe coach. The current board is: [${boardStateForPrompt}]. It is Player X's turn. What is the single best move (index 0-8) for Player X to make right now, and give a very short, one-sentence reason why. Respond in JSON format like this: {"move": number, "reason": "string"}`;
+                
+                const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${YOUR_API_KEY}`;
+
+                try {
+                    const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                    if (!response.ok) throw new Error(`API Error: ${response.status}`);
+                    
+                    const result = await response.json();
+                    let rawText = result.candidates[0].content.parts[0].text;
+                    rawText = rawText.replace(/```json\n/g, '').replace(/```/g, '');
+                    const hint = JSON.parse(rawText);
+
+                    aiAnalysisPanel.textContent = hint.reason;
+                    
+                    // Highlight the suggested cell
+                    const hintCell = boardElement.querySelector(`[data-index='${hint.move}']`);
+                    if (hintCell) {
+                        hintCell.classList.add('hint-glow');
+                    }
+
+                } catch (error) {
+                    console.error("Error fetching AI hint:", error);
+                    aiAnalysisPanel.textContent = "Coach is unavailable. Trust your instincts.";
+                } finally {
+                    hintBtn.disabled = false;
+                }
+            };
+
+            // --- Event Listeners ---
+            pvpBtn.addEventListener('click', () => {
+                startAudio();
+                gameMode = 'pvp';
+                pvpBtn.classList.add('active');
+                pvcBtn.classList.remove('active');
+                scoreboard.classList.add('hidden');
+                initializeGame();
+            });
+            pvcBtn.addEventListener('click', () => {
+                startAudio();
+                gameMode = 'pvc';
+                pvcBtn.classList.add('active');
+                pvpBtn.classList.remove('active');
+                score = { wins: 0, losses: 0, draws: 0 };
+                updateScore();
+                scoreboard.classList.remove('hidden');
+                initializeGame();
+            });
+            resetBtn.addEventListener('click', () => {
+                startAudio();
+                initializeGame();
+            });
+            analysisBtn.addEventListener('click', getAIAnalysis);
+            hintBtn.addEventListener('click', getAIHint); // NEW
+
+            // --- Initial Load ---
+            initializeGame();
+        });
+    </script>
+
+</body>
+</html>
+
